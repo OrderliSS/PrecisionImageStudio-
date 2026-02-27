@@ -1,11 +1,33 @@
 {
     "name": "precision-image-studio",
     "version": "1.0.0",
+    "description": "Precision Image Studio Master Edition",
+    "author": "OrderliSS",
     "main": "main.js",
     "scripts": {
-        "start": "electron ."
+        "start": "electron .",
+        "build": "electron-builder --win"
+    },
+    "build": {
+        "appId": "com.orderliss.precisionimagestudio",
+        "productName": "Precision Image Studio",
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ]
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        }
     },
     "devDependencies": {
-        "electron": "^30.0.0"
+        "electron": "^30.0.0",
+        "electron-builder": "^24.13.3"
     }
 }
