@@ -29,5 +29,9 @@
     "devDependencies": {
         "electron": "^30.0.0",
         "electron-builder": "^24.13.3"
+    },
+    "dependencies": {
+        "@imgly/background-removal": "^1.7.0",
+        "colorthief": "^2.6.0"
     }
 }

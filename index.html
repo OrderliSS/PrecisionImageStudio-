@@ -436,7 +436,6 @@
         mainCanvas.addEventListener('touchmove', draw, { passive: false });
         window.addEventListener('touchend', stopDrawing);
 
-        // 1. File Upload & Initialization
         const handleImageFile = (file) => {
             if (!file) return;
             const reader = new FileReader();
@@ -458,6 +457,25 @@
                     currentStateIndex = -1;
                     saveState();
 
+                    // Extract colors with ColorThief
+                    try {
+                        if (img.complete) {
+                            const palette = colorThief.getPalette(img, 4);
+                            if (palette && palette.length >= 4) {
+                                const swatches = document.querySelectorAll('.bg-swatch');
+                                // Skip the first swatch (transparent)
+                                for (let i = 0; i < 4; i++) {
+                                    const hex = rgbToHex(palette[i][0], palette[i][1], palette[i][2]);
+                                    swatches[i + 1].dataset.color = hex;
+                                    swatches[i + 1].style.backgroundColor = hex;
+                                    swatches[i + 1].title = `Auto Extracted: ${hex}`;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.log("Color extraction skipped/failed: ", e);
+                    }
+
                     activateUI(img.width, img.height);
                     render();
                     showToast("Asset Loaded Successfully");
@@ -468,6 +486,10 @@
         };
 
         imageInput.addEventListener('change', (e) => handleImageFile(e.target.files[0]));
+
+        function rgbToHex(r, g, b) {
+            return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).toUpperCase();
+        }
 
         document.getElementById('importArea').addEventListener('click', async () => {
             if (window.electronAPI) {
@@ -489,6 +511,25 @@
                         stateStack = [];
                         currentStateIndex = -1;
                         saveState();
+
+                        // Extract colors with ColorThief
+                        try {
+                            if (img.complete) {
+                                const palette = colorThief.getPalette(img, 4);
+                                if (palette && palette.length >= 4) {
+                                    const swatches = document.querySelectorAll('.bg-swatch');
+                                    // Skip the first swatch (transparent)
+                                    for (let i = 0; i < 4; i++) {
+                                        const hex = rgbToHex(palette[i][0], palette[i][1], palette[i][2]);
+                                        swatches[i + 1].dataset.color = hex;
+                                        swatches[i + 1].style.backgroundColor = hex;
+                                        swatches[i + 1].title = `Auto Extracted: ${hex}`;
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.log("Color extraction skipped/failed: ", e);
+                        }
 
                         activateUI(img.width, img.height);
                         render();
@@ -558,68 +599,72 @@
             render();
         });
 
+        // Setup local ML models
+        import { removeBackground } from './node_modules/@imgly/background-removal/dist/index.js';
+        import ColorThief from './node_modules/colorthief/dist/color-thief.mjs';
+
+        const colorThief = new ColorThief();
+
         // 4. Advanced AI Background Removal
         document.getElementById('removeBgBtn').addEventListener('click', async () => {
-            if (!currentSubject) return;
+            if (!originalImage) return; // Always extract from original for best quality
             setLoading(true);
 
             try {
-                const procBuffer = document.createElement('canvas');
-                const maxDim = 1800; // High resolution buffer
-                let scale = Math.min(1, maxDim / Math.max(currentSubject.width, currentSubject.height));
-                procBuffer.width = currentSubject.width * scale;
-                procBuffer.height = currentSubject.height * scale;
-                const pCtx = procBuffer.getContext('2d');
-                pCtx.drawImage(currentSubject, 0, 0, procBuffer.width, procBuffer.height);
-
-                const b64 = procBuffer.toDataURL('image/png').split(',')[1];
-
-                // Optimized Elite Prompt for Semantic Extraction
-                const prompt = "TASK: ELITE SUBJECT EXTRACTION. \n" +
-                    "1. IDENTIFICATION: Isolate the primary central subject. \n" +
-                    "2. REMOVAL: Detect and eliminate the background entirely. \n" +
-                    "3. URGENGY: The input image contains a FAKE grey/white square checkerboard background. Identify this as the background and REMOVE IT. \n" +
-                    "4. ALPHA: Return the subject with a 100% genuine alpha-transparent background. No white/grey remnants. \n" +
-                    "5. OUTPUT: Return only the high-resolution subject.";
-
-                const response = await callAI(b64, prompt);
-
-                if (response) {
-                    const resImg = new Image();
-                    resImg.onload = () => {
-                        // Feathering logic
-                        subjectCanvas.width = resImg.width;
-                        subjectCanvas.height = resImg.height;
-                        sCtx.clearRect(0, 0, subjectCanvas.width, subjectCanvas.height);
-
-                        // Draw AI result
-                        sCtx.drawImage(resImg, 0, 0);
-
-                        // Apply slight feather by duplicating with blur and masking
-                        const blurCanvas = document.createElement('canvas');
-                        blurCanvas.width = subjectCanvas.width;
-                        blurCanvas.height = subjectCanvas.height;
-                        const bCtx = blurCanvas.getContext('2d');
-
-                        bCtx.filter = 'blur(1px)';
-                        bCtx.drawImage(resImg, 0, 0);
-
-                        sCtx.globalCompositeOperation = 'destination-in';
-                        sCtx.drawImage(blurCanvas, 0, 0);
-                        sCtx.globalCompositeOperation = 'source-over';
-
-                        currentSubject = subjectCanvas;
-                        saveState();
-                        render();
-                        setLoading(false);
-                        showToast("AI Extraction Complete");
-                    };
-                    resImg.src = `data:image/png;base64,${response}`;
+                const statusText = document.getElementById('loadingStatusText');
+                if (statusText) {
+                    statusText.textContent = `Initializing Local AI...`;
+                    statusText.classList.replace('text-rose-500', 'text-blue-600');
                 }
+
+                const pContainer = document.getElementById('progressContainer');
+                const pBar = document.getElementById('progressBar');
+                if (pContainer) pContainer.classList.remove('hidden');
+
+                // Get image blob for imgly
+                const blob = await new Promise(resolve => {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = originalImage.width;
+                    tempCanvas.height = originalImage.height;
+                    const tCtx = tempCanvas.getContext('2d');
+                    tCtx.drawImage(originalImage, 0, 0);
+                    tempCanvas.toBlob(resolve, 'image/png');
+                });
+
+                // Run Local Background Removal
+                const resultBlob = await removeBackground(blob, {
+                    progress: (key, current, total) => {
+                        if (pBar) {
+                            const progress = Math.min((current / total) * 100, 100);
+                            pBar.style.width = `${progress}%`;
+                            if (statusText) statusText.textContent = `Processing: ${Math.round(progress)}%`;
+                        }
+                    }
+                });
+
+                const resImg = new Image();
+                resImg.onload = () => {
+                    subjectCanvas.width = resImg.width;
+                    subjectCanvas.height = resImg.height;
+                    sCtx.clearRect(0, 0, subjectCanvas.width, subjectCanvas.height);
+                    sCtx.drawImage(resImg, 0, 0);
+
+                    currentSubject = subjectCanvas;
+                    saveState();
+                    render();
+                    setLoading(false);
+                    if (pContainer) pContainer.classList.add('hidden');
+                    if (statusText) statusText.textContent = 'AI Extraction';
+                    showToast("Local Extraction Complete");
+                };
+                resImg.src = URL.createObjectURL(resultBlob);
+
             } catch (err) {
                 console.error(err);
                 setLoading(false);
-                showToast("Extraction Timeout - Please Retry");
+                const pContainer = document.getElementById('progressContainer');
+                if (pContainer) pContainer.classList.add('hidden');
+                showToast("Extraction Failed");
             }
         });
 
@@ -634,98 +679,6 @@
             render();
             showToast("Restored Original Material");
         });
-
-        async function callAI(base64, promptText, retries = 5) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:streamGenerateContent?key=${apiKey}&alt=sse`;
-            const payload = {
-                contents: [{
-                    parts: [
-                        { text: promptText },
-                        { inlineData: { mimeType: "image/png", data: base64 } }
-                    ]
-                }],
-                generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
-            };
-
-            for (let i = 0; i < retries; i++) {
-                try {
-                    if (i > 0) {
-                        const statusText = document.getElementById('loadingStatusText');
-                        if (statusText) {
-                            statusText.textContent = `Rate Limit/Error - Retrying (${i}/${retries})...`;
-                            statusText.classList.replace('text-blue-600', 'text-rose-500');
-                        }
-                    }
-
-                    const res = await fetch(url, { method: 'POST', body: JSON.stringify(payload) });
-
-                    if (!res.ok) {
-                        if (res.status === 429) {
-                            throw new Error("Rate limit exceeded");
-                        }
-                        throw new Error(`HTTP error! status: ${res.status}`);
-                    }
-
-                    const reader = res.body.getReader();
-                    const decoder = new TextDecoder("utf-8");
-                    let resultData = "";
-
-                    const pContainer = document.getElementById('progressContainer');
-                    const pBar = document.getElementById('progressBar');
-                    if (pContainer) pContainer.classList.remove('hidden');
-                    let chunksReceived = 0;
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const chunk = decoder.decode(value, { stream: true });
-                        resultData += chunk;
-
-                        chunksReceived++;
-                        if (pBar) {
-                            // Pseudo-progress based on chunks (Gemini SSE chunks)
-                            // Usually takes ~10-15 chunks for an image
-                            const progress = Math.min((chunksReceived / 15) * 100, 95);
-                            pBar.style.width = `${progress}%`;
-                        }
-                    }
-
-                    if (pBar) pBar.style.width = `100%`;
-
-                    // Parse SSE stream
-                    const lines = resultData.split('\n');
-                    let fullB64 = '';
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const dataStr = line.replace('data: ', '');
-                            try {
-                                const dataObj = JSON.parse(dataStr);
-                                const b64Part = dataObj.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-                                if (b64Part) fullB64 += b64Part;
-                            } catch (e) {
-                                // Ignore non-JSON or malformed parts
-                            }
-                        }
-                    }
-
-                    if (fullB64) {
-                        const loadingStatusText = document.getElementById('loadingStatusText');
-                        if (loadingStatusText) {
-                            loadingStatusText.textContent = 'AI Extraction';
-                            loadingStatusText.classList.replace('text-rose-500', 'text-blue-600');
-                        }
-                        if (pContainer) pContainer.classList.add('hidden');
-                        if (pBar) pBar.style.width = '0%';
-                        return fullB64;
-                    }
-                    throw new Error("Empty AI Response after stream");
-
-                } catch (err) {
-                    if (i === retries - 1) throw err;
-                    await new Promise(r => setTimeout(r, Math.pow(2, i) * 1500)); // Exponential backoff start at 1.5s
-                }
-            }
-        }
 
         // 5. Atomic Rendering Sequence
         function render() {
