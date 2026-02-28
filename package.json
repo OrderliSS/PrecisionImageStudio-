@@ -1,6 +1,6 @@
 {
     "name": "precision-image-studio",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Precision Image Studio Master Edition",
     "author": "OrderliSS",
     "main": "main.js",
@@ -14,6 +14,7 @@
         "appId": "com.orderliss.precisionimagestudio",
         "productName": "Precision Image Studio",
         "win": {
+            "icon": "icon.png",
             "target": [
                 {
                     "target": "nsis",
@@ -24,10 +25,12 @@
             ]
         },
         "nsis": {
-            "oneClick": false,
-            "allowToChangeInstallationDirectory": true
+            "oneClick": true,
+            "allowToChangeInstallationDirectory": false,
+            "allowElevation": true
         },
         "mac": {
+            "icon": "icon.png",
             "target": [
                 "dmg",
                 "zip"

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -28,6 +28,18 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    // Enable Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy
+    // to unlock SharedArrayBuffer and multi-threaded Wasm
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Cross-Origin-Embedder-Policy': ['require-corp'],
+                'Cross-Origin-Opener-Policy': ['same-origin'],
+            }
+        });
+    });
+
     createWindow();
 
     app.on('activate', () => {
