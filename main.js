@@ -20,6 +20,11 @@ function createWindow() {
     });
 
     win.loadFile('index.html');
+
+    win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        console.log(`[Browser Console] level ${level}: ${message} (line ${line})`);
+    });
+    // win.webContents.openDevTools(); // Optional, keep hidden for now.
 }
 
 app.whenReady().then(() => {

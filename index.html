@@ -63,6 +63,13 @@
             border-radius: 10px;
         }
     </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "onnxruntime-web": "./node_modules/onnxruntime-web/dist/ort.mjs"
+        }
+    }
+    </script>
 </head>
 
 <body class="bg-slate-50 min-h-screen text-slate-900 overflow-hidden">
@@ -298,7 +305,7 @@
         Message
     </div>
 
-    <script>
+    <script type="module">
         const apiKey = "";
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'precision-studio-master-v3';
 
@@ -599,11 +606,25 @@
             render();
         });
 
-        // Setup local ML models
-        import { removeBackground } from './node_modules/@imgly/background-removal/dist/index.js';
-        import ColorThief from './node_modules/colorthief/dist/color-thief.mjs';
+        // Setup local ML models dynamically
+        let removeBackground;
+        let colorThief;
 
-        const colorThief = new ColorThief();
+        // Use dynamic imports to catch and log errors, and prevent blocking
+        (async () => {
+            try {
+                const imglyModule = await import('./node_modules/@imgly/background-removal/dist/index.mjs');
+                removeBackground = imglyModule.removeBackground;
+
+                const ctModule = await import('./node_modules/colorthief/dist/color-thief.mjs');
+                // color-thief.mjs exports default
+                const ColorThief = ctModule.default;
+                colorThief = new ColorThief();
+                console.log("Successfully loaded dynamic modules.");
+            } catch (err) {
+                console.error("Module loading failed:", err);
+            }
+        })();
 
         // 4. Advanced AI Background Removal
         document.getElementById('removeBgBtn').addEventListener('click', async () => {
